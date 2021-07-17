@@ -18,11 +18,7 @@ class Island extends PureComponent<Props> {
     }
 
     render() {
-        return (
-            <div
-                ref={this.containerRef}
-            />
-        );
+        return <div ref={this.containerRef} />;
     }
 }
 

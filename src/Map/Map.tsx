@@ -1,12 +1,13 @@
 import React, {PureComponent} from 'react';
 import Renderer from './Renderer';
 import Island from './Island';
+import FloodQueue from './FloodQueue';
 
 import type {Island as IslandType} from './constants';
 
 const SELECTION_STEP = 8;
 const PADDING = 8;
-const SELECTION_BOX_SIZE = 16;
+const SELECTION_BOX_SIZE = 8;
 const SELECTION_BOX_BORDER_SIZE = 2;
 
 type Props = {
@@ -22,13 +23,15 @@ type State = {
     isLoaded: boolean;
     speedFactor: number;
     islands: IslandType[];
+    stage?: string;
 }
 
 class Map extends PureComponent<Props, State> {
+    renderer?: Renderer;
     containerRef: React.RefObject<HTMLDivElement> = React.createRef();
     islandsContainerRef: React.RefObject<HTMLDivElement> = React.createRef();
-    renderer?: Renderer;
     seenPixels: Set<string> = new Set();
+    floodQueue = new FloodQueue();
 
     state = this.getInitialState();
 
@@ -90,7 +93,12 @@ class Map extends PureComponent<Props, State> {
         } = this.state;
 
         return (
-            <div>
+            <div style={{
+                display: 'flex',
+                alignItems: 'center',
+                flexDirection: 'column',
+            }}>
+                <p>{this.state.stage}</p>
                 <div
                     style={{
                         width: `${width}px`,
@@ -115,10 +123,16 @@ class Map extends PureComponent<Props, State> {
                 <div
                     style={{
                         display: 'flex',
+                        height: '85px'
                     }}
                 >
                     {islands.map((island, i) => <Island key={i} island={island} />)}
                 </div>
+                {islands.map(({area, x, y, width, height}, i) => (
+                    <p style={{fontSize: '10px', margin: 0, padding: '2px'}}>
+                        {`Island ${i + 1} - area: ${area}, x: ${x}, y: ${y}, width: ${width}, height: ${height}`}
+                    </p>
+                ))}
             </div>
         );
     }
@@ -129,8 +143,6 @@ class Map extends PureComponent<Props, State> {
         const x = selectionX + positionOffset;
         const y = selectionY + positionOffset;
         const size = SELECTION_BOX_SIZE - (SELECTION_BOX_BORDER_SIZE * 2);
-        const rgba = this.renderer?.getPixelRgba(selectionX, selectionY);
-        const backgroundColor = `rgba(${rgba?.join(',') || '0, 0, 0, 0'})`;
         return (
             <div
                 style={{
@@ -139,7 +151,6 @@ class Map extends PureComponent<Props, State> {
                     width: `${size}px`,
                     height: `${size}px`,
                     border: `${SELECTION_BOX_BORDER_SIZE}px solid orange`,
-                    backgroundColor,
                     position: 'absolute',
                     transition: 'all 10ms linear'
                 }}
@@ -153,8 +164,16 @@ class Map extends PureComponent<Props, State> {
             selectionY,
             width,
             height,
+            islands
         } = this.state;
 
+        if (this.floodQueue.length) {
+            this.floodQueue.batchFlood();
+            requestAnimationFrame(this.tick);
+            this.setState({stage: `Filling island ${islands.length}...`});
+            return;
+        }
+        this.setState({stage: 'Scanning...'});
         this.startFlood(selectionX, selectionY);
 
         let newSelectionX = selectionX;
@@ -188,6 +207,7 @@ class Map extends PureComponent<Props, State> {
         const {
             renderer,
             seenPixels,
+            floodQueue,
         } = this;
         const {
             width,
@@ -225,7 +245,7 @@ class Map extends PureComponent<Props, State> {
         this.setState({
             islands: [
                 ...islands,
-                island
+                island,
             ]
         });
 
@@ -250,11 +270,11 @@ class Map extends PureComponent<Props, State> {
             }
 
             seenPixels.add(serializedPosition);
-            renderer?.drawPixel(newX, newY, '#6E9887');
-            flood(newX, newY + 1);
-            flood(newX + 1, newY);
             flood(newX, newY - 1);
+            flood(newX + 1, newY);
+            flood(newX, newY + 1)
             flood(newX - 1, newY);
+            floodQueue.add(() => renderer?.drawPixel(newX, newY, '#6E9887'));
         }
 
         function shouldFlood(newX: number, newY: number): boolean {
