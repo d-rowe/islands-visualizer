@@ -30,11 +30,11 @@ class FloodQueue {
     batchFlood() {
         for (let i = 0; i < this.batchSize; i++) {
             const node = this.pop();
-            if (node) {
-                node.flood();
-            } else {
+            if (!node) {
                 return;
             }
+
+            node.flood();
         }
     }
 
